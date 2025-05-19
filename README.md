@@ -16,7 +16,7 @@ This end-to-end project demonstrates a modular, fault-tolerant, and scalable dat
 
 ## Architecture
 
-![Architecture](assets/architecture.jpeg)
+![Architecture](assets/architecture.jpg
 
 ---
 
