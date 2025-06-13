@@ -1,17 +1,126 @@
 services:
-
-  mysql:
-    image: mariadb:10.11.2
-    container_name: mysql
-    volumes:
-      - ./docker-volumes/mysql:/var/lib/mysql
-      - ./data/init_sql:/docker-entrypoint-initdb.d
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
     ports:
-      - "3306:3306"
-    env_file:
-      - .env
+      - "9000:9000"  # API endpoint
+      - "9001:9001"  # Web console
+    volumes:
+      - minio_data:/data
     networks:
       - data_network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+    # Spark Services
+  spark-master:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    container_name: spark-master
+    env_file: .env
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "8081:8080"  # Spark Master Web UI
+      - "7077:7077"  # Spark Master port
+    networks:
+      - data_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  spark-worker-1:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    container_name: spark-worker-1
+    env_file: .env
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    ports:
+      - "8082:8081"  # Worker Web UI
+    networks:
+      - data_network
+    depends_on:
+      - spark-master
+
+  spark-worker-2:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    container_name: spark-worker-2
+    env_file: .env
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    ports:
+      - "8083:8081"  # Worker Web UI
+    volumes:
+      - ./spark-apps:/opt/spark-apps
+      - ./spark-data:/opt/spark-data
+    networks:
+      - data_network
+    depends_on:
+      - spark-master
+
+  spark-thrift:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    container_name: spark-thrift
+    env_file: .env
+    command: sh -c "sleep 20 && /opt/bitnami/spark/sbin/start-thriftserver.sh --master spark://spark-master:7077 --conf spark.cores.max=2 --conf spark.sql.warehouse.dir=s3a://gold/warehouse/"
+    ports:
+      - "10000:10000"  # Thrift Server port (for DBT)
+      - "4040:4040"    # Spark SQL Web UI
+    volumes:
+      - ./spark-apps:/opt/spark-apps
+      - ./spark-data:/opt/spark-data
+    networks:
+      - data_network
+    depends_on:
+      - spark-master
+      - minio
+
+  spark-notebook:
+    build:
+      context: .
+      dockerfile: spark-notebook/Dockerfile
+    container_name: spark-notebook
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_DRIVER_HOST=spark-notebook
+      - SPARK_DRIVER_BINDADDRESS=0.0.0.0
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ./spark-notebook/conf/spark-defaults.conf:/usr/local/spark/conf/spark-defaults.conf
+    ports:
+      - "8888:8888"    # Jupyter Lab
+      - "4043:4040"    # Spark UI
+      - "4041:4041"    # Additional Spark UI ports
+      - "4042:4042"
+    networks:
+      - data_network
+    depends_on:
+      - spark-master
+      - minio
+
+volumes:
+  minio_data:
 
 networks:
   data_network:
