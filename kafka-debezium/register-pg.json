@@ -1,0 +1,19 @@
+{
+  "name": "pagila-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "plugin.name": "pgoutput",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "debezium",
+    "database.password": "debezium_pwd",
+    "database.dbname": "pagila",
+    "topic.prefix": "pagila",
+    "slot.name": "debezium_pagila_slot",
+    "publication.name": "dbz_pagila_pub",
+    "schema.include.list": "public",
+    "table.include.list": "public.rental,public.payment,public.customer,public.film,public.inventory",
+    "snapshot.mode": "initial",
+    "decimal.handling.mode": "precise"
+  }
+}

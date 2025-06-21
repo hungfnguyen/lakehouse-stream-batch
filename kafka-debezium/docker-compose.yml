@@ -104,6 +104,25 @@ services:
       retries: 5
     mem_limit: 1000m
 
+  connect:
+    image: debezium/connect:2.4
+    container_name: debezium-connect
+    depends_on:
+      broker:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: broker:29092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_status
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+    networks:
+      - data_network
+
 networks:
   data_network:
     driver: bridge
